@@ -1,0 +1,15 @@
+# Keys never belong in the repository
+*-keys.json
+*.keys.txt
+
+# Published without docs and tests (the public README is the only document)
+*.md
+!README.md
+docs/
+test/
+
+node_modules/
+package-lock.json
+pnpm-lock.yaml
+*.log
+tmp/
