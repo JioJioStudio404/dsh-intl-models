@@ -6,7 +6,11 @@
  * thinking quirks, limits and prices.
  *
  *   npm pack @earendil-works/pi-ai && tar -xzf earendil-works-pi-ai-*.tgz
- *   node scripts/gen-catalog.mjs --pi package/dist/providers/data
+ *   node scripts/gen-catalog.mjs --pi package/dist/providers/data --hosts <dir>
+ *
+ * `--hosts`: a folder with DeepInfra's and Novita's public model lists, which pi-ai
+ * does not carry (`deepinfra-models.json` from api.deepinfra.com/v1/openai/models,
+ * `novita-models.json` from api.novita.ai/openai/v1/models; no key needed).
  *
  * The data is read as JSON; no code of the package runs.
  */
@@ -28,7 +32,7 @@ const version = (() => {
 })();
 
 /** Catalog name → pi-ai data file. */
-const SOURCES = { openai: "openai", anthropic: "anthropic", xai: "xai", openrouter: "openrouter", opencode: "opencode", "opencode-go": "opencode-go", google: "google" };
+const SOURCES = { openai: "openai", anthropic: "anthropic", xai: "xai", openrouter: "openrouter", opencode: "opencode", "opencode-go": "opencode-go", google: "google", groq: "groq", huggingface: "huggingface", nvidia: "nvidia" };
 const PROTOCOLS = { "openai-responses": "responses", "anthropic-messages": "messages", "openai-completions": "chat", "google-generative-ai": "gemini" };
 /** Ticked by default (the rest are offered unticked). */
 const RECOMMENDED = {
@@ -40,11 +44,27 @@ const RECOMMENDED = {
   openrouter: ["anthropic/claude-opus-5.5", "anthropic/claude-sonnet-5.5", "openai/gpt-6-sol", "google/gemini-3.8-flash", "x-ai/grok-4.7", "deepseek/deepseek-v4-pro", "qwen/qwen3.8-max-0902", "moonshotai/kimi-k3", "z-ai/glm-5.3", "minimax/minimax-m3", "openrouter/free"],
   opencode: ["claude-opus-5-5", "claude-sonnet-5-5", "gpt-6-sol", "gpt-5.6-sol", "gemini-3.8-flash", "grok-4.7", "kimi-k3", "glm-5.3", "deepseek-v4-pro", "qwen3.8-max", "minimax-m3"],
   "opencode-go": ["deepseek-v4-pro", "kimi-k3", "glm-5.3", "qwen3.8-max", "minimax-m3", "mimo-v2.6-pro", "grok-4.7", "gpt-5.6-luna"],
+  // Groq's live list (2026-11-04) no longer serves the Llama models pi-ai still lists.
+  groq: ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"],
+  huggingface: ["deepseek-ai/DeepSeek-V4.1-Flash", "deepseek-ai/DeepSeek-V4-Pro", "moonshotai/Kimi-K3", "zai-org/GLM-5.3", "MiniMaxAI/MiniMax-M3", "Qwen/Qwen3.8-2.4T-A95B"],
+  // Served to a free account on 2026-11-04 (GLM-5.3 answers 410 Gone, Kimi K2.6 404 "Not found for account").
+  nvidia: ["deepseek-ai/deepseek-v4.1-flash", "z-ai/glm-5.3-flash", "nvidia/nemotron-3-ultra-550b-a55b", "nvidia/nemotron-3.5-super-vl-120b-a12b"],
+  deepinfra: ["deepseek-ai/DeepSeek-V4.1-Flash", "deepseek-ai/DeepSeek-V4-Pro", "moonshotai/Kimi-K3", "zai-org/GLM-5.3", "MiniMaxAI/MiniMax-M3", "Qwen/Qwen3.8-Max"],
+  novita: ["deepseek/deepseek-v4.1-flash", "deepseek/deepseek-v4-pro", "moonshotai/kimi-k3.1-pro", "moonshotai/kimi-k3", "zai-org/glm-5.3", "minimax/minimax-m3", "qwen/qwen3.8-max"],
 };
 /** Known corrections to the data (Gemini 2.5 Pro cannot switch thinking off: its minimum budget is 128). */
 const OVERRIDES = [
   [/^(google\/)?gemini-2\.5-pro/, (entry) => { if (entry.reasoning) entry.reasoning.off = false; }],
+  // Google's model page: 65,536 output tokens per stream (pi-ai 1.3.0 says 32,768).
+  [/^gemini-4-argon$/, (entry) => { entry.output = 65536; }],
 ];
+/**
+ * Models newer than pi-ai 1.2.0's data, added as the vendor documents them (kept when the data has them).
+ * Gemini 4 Argon: GA 2026-10-13 (ai.google.dev/gemini-api/docs/generate-content/latest-model), not on the free tier.
+ */
+const ADDITIONS = {
+  google: [{ id: "gemini-4-argon", name: "Gemini 4 Argon", protocol: "gemini", image: true, context: 1048576, output: 65536, reasoning: { levels: ["low", "medium", "high"], off: false, map: { low: "low", medium: "medium", high: "high" } }, cost: { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 0 }, recommended: false }],
+};
 /** Not chat models, or not for streaming chat. */
 const SKIP = /:batch$|realtime|audio|-image|image-|deep-research|computer-use|-live|lyria|tts|embedding|moderation|safeguard/i;
 
@@ -105,6 +125,7 @@ for (const [catalog, file] of Object.entries(SOURCES)) {
       for (const [pattern, fix] of OVERRIDES) if (pattern.test(model.id)) fix(entries.at(-1));
     }
   }
+  for (const extra of ADDITIONS[catalog] ?? []) if (!entries.some((entry) => entry.id === extra.id)) entries.push({ ...extra });
   entries.sort((a, b) => Number(b.recommended) - Number(a.recommended) || (RECOMMENDED[catalog] ?? []).indexOf(a.id) - (RECOMMENDED[catalog] ?? []).indexOf(b.id) || a.id.localeCompare(b.id));
   const missing = (RECOMMENDED[catalog] ?? []).filter((id) => !entries.some((entry) => entry.id === id));
   if (missing.length) console.warn(`${catalog}: recommended but not in the data: ${missing.join(", ")}`);
@@ -189,6 +210,66 @@ for (const [catalog, file] of Object.entries(SOURCES)) {
   if (missing.length) console.warn(`vercel: recommended but not in the data: ${missing.join(", ")}`);
   CATALOGS.vercel = entries;
   console.log(`vercel: ${entries.length} models (${entries.filter((entry) => entry.protocol === "messages").length} over Messages), ${entries.filter((entry) => entry.recommended).length} ticked`);
+}
+
+// DeepInfra and Novita (their public lists, `--hosts`): chat models that call tools, with their limits, image input
+// and prices. Their lists say a model reasons but not how its thinking is switched, so no level is offered
+// (no reasoning field is sent; the model thinks as it does by default).
+{
+  const hostsDir = args.includes("--hosts") ? args[args.indexOf("--hosts") + 1] : null;
+  const listOf = (name) => {
+    if (!hostsDir) return null;
+    try {
+      return JSON.parse(readFileSync(join(hostsDir, `${name}-models.json`), "utf8")).data ?? [];
+    } catch {
+      console.warn(`${name}: no list in ${hostsDir}`);
+      return null;
+    }
+  };
+  const finish = (catalog, entries) => {
+    const picks = RECOMMENDED[catalog] ?? [];
+    for (const entry of entries) entry.recommended = picks.includes(entry.id);
+    entries.sort((a, b) => Number(b.recommended) - Number(a.recommended) || picks.indexOf(a.id) - picks.indexOf(b.id) || a.id.localeCompare(b.id));
+    const missing = picks.filter((id) => !entries.some((entry) => entry.id === id));
+    if (missing.length) console.warn(`${catalog}: recommended but not in the list: ${missing.join(", ")}`);
+    CATALOGS[catalog] = entries;
+    console.log(`${catalog}: ${entries.length} models, ${entries.filter((entry) => entry.recommended).length} ticked`);
+  };
+  const price = (value) => (typeof value === "number" && Number.isFinite(value) ? round(value) : typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value)) ? round(Number(value)) : 0);
+  const deepinfra = listOf("deepinfra");
+  if (deepinfra) {
+    finish("deepinfra", deepinfra.filter((item) => (item.metadata?.tags ?? []).includes("chat") && !SKIP.test(item.id) && !/safety|guard/i.test(item.id)).map((item) => {
+      const meta = item.metadata ?? {};
+      const tags = meta.tags ?? [];
+      const pricing = meta.pricing ?? {};
+      return {
+        id: item.id,
+        name: item.id.split("/").pop(),
+        protocol: "chat",
+        image: tags.includes("vision") || tags.includes("vlm"),
+        context: meta.context_length ?? null,
+        output: meta.max_tokens ?? null,
+        reasoning: null,
+        cost: { input: price(pricing.input_tokens), output: price(pricing.output_tokens), cacheRead: price(pricing.cache_read_tokens ?? pricing.input_tokens), cacheWrite: 0 },
+      };
+    }));
+  }
+  const novita = listOf("novita");
+  if (novita) {
+    finish("novita", novita.filter((item) => item.model_type === "chat" && item.status === 1 && (item.features ?? []).includes("function-calling") && !SKIP.test(item.id) && !/\/community$|^dev\//.test(item.id)).map((item) => {
+      const pricing = item.pricing ?? {};
+      return {
+        id: item.id,
+        name: item.display_name ?? item.id,
+        protocol: "chat",
+        image: (item.input_modalities ?? []).includes("image"),
+        context: item.context_size ?? null,
+        output: item.max_output_tokens ?? null,
+        reasoning: null,
+        cost: { input: price(pricing.prompt?.price_per_m_decimal), output: price(pricing.completion?.price_per_m_decimal), cacheRead: price(pricing.input_cache_read?.price_per_m_decimal ?? pricing.prompt?.price_per_m_decimal), cacheWrite: 0 },
+      };
+    }));
+  }
 }
 
 const header = `/**
