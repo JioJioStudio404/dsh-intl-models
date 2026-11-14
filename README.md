@@ -15,6 +15,19 @@ DeepSeek Harness 的国际模型插件，支持 OpenAI、Anthropic Claude、xAI 
 
 ## 安装
 
+### 通过插件索引安装（推荐）
+
+1. 在 DeepSeek Harness 的**插件**页，于**实验性插件**中打开**自定义插件索引**。
+2. 切换到**发现**，点击**添加索引源**，填入：
+
+   ```
+   https://raw.githubusercontent.com/JioJioStudio404/dsh-jiojiostudio404-index/main/index.json
+   ```
+
+3. 在列表中找到本插件并确认安装，安装后重启 DeepSeek Harness。之后发布的新版本会显示**有新版本**，可在应用内更新。
+
+### 从源码安装
+
 需要 Node.js 24.9 或更高版本（DeepSeek Harness 0.2.2 的最低要求）。
 
 ```bash
