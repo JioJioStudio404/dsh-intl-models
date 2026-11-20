@@ -1,7 +1,7 @@
 {
   "name": "dsh-intl-models",
-  "version": "0.4.8",
-  "description": "International LLM vendors for DeepSeek Harness — OpenAI, Anthropic Claude, xAI Grok, OpenRouter, OpenCode Zen / Go, Google Gemini, Cloudflare Workers AI and Vercel AI Gateway — with many API keys per endpoint: validity per key (and the OpenRouter and Vercel balance), spending per key, automatic switching to the next key, each model on its own protocol (Responses, Messages, Chat Completions, Gemini) with reasoning effort, tool calling, reasoning replay and prompt caching.",
+  "version": "0.4.9",
+  "description": "International LLM vendors for DeepSeek Harness — OpenAI, Anthropic Claude, xAI Grok, OpenRouter, OpenCode Zen / Go, Google Gemini, Cloudflare Workers AI, Vercel AI Gateway, the open-model hosts (Groq, DeepInfra, Novita, Hugging Face, NVIDIA) and Mistral AI — with many API keys per endpoint: validity per key (and the OpenRouter and Vercel balance), spending per key, automatic switching to the next key, each model on its own protocol (Responses, Messages, Chat Completions, Gemini) with reasoning effort, tool calling, reasoning replay and prompt caching.",
   "icon": "icon.svg",
   "type": "module",
   "main": "lib/index.js",

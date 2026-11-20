@@ -32,8 +32,9 @@ const version = (() => {
 })();
 
 /** Catalog name → pi-ai data file. */
-const SOURCES = { openai: "openai", anthropic: "anthropic", xai: "xai", openrouter: "openrouter", opencode: "opencode", "opencode-go": "opencode-go", google: "google", groq: "groq", huggingface: "huggingface", nvidia: "nvidia" };
-const PROTOCOLS = { "openai-responses": "responses", "anthropic-messages": "messages", "openai-completions": "chat", "google-generative-ai": "gemini" };
+const SOURCES = { openai: "openai", anthropic: "anthropic", xai: "xai", openrouter: "openrouter", opencode: "opencode", "opencode-go": "opencode-go", google: "google", groq: "groq", huggingface: "huggingface", nvidia: "nvidia", mistral: "mistral" };
+// Mistral's own API (`mistral-conversations` in pi-ai) is its Chat Completions with Mistral's rules (protocols/chat.js).
+const PROTOCOLS = { "openai-responses": "responses", "anthropic-messages": "messages", "openai-completions": "chat", "google-generative-ai": "gemini", "mistral-conversations": "chat" };
 /** Ticked by default (the rest are offered unticked). */
 const RECOMMENDED = {
   openai: ["gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.5", "gpt-5.4-mini"],
@@ -50,19 +51,30 @@ const RECOMMENDED = {
   // Served to a free account on 2026-11-04 (GLM-5.3 answers 410 Gone, Kimi K2.6 404 "Not found for account").
   nvidia: ["deepseek-ai/deepseek-v4.1-flash", "z-ai/glm-5.3-flash", "nvidia/nemotron-3-ultra-550b-a55b", "nvidia/nemotron-3.5-super-vl-120b-a12b"],
   deepinfra: ["deepseek-ai/DeepSeek-V4.1-Flash", "deepseek-ai/DeepSeek-V4-Pro", "moonshotai/Kimi-K3", "zai-org/GLM-5.3", "MiniMaxAI/MiniMax-M3", "Qwen/Qwen3.8-Max"],
+  // Mistral (live 2026-11-19): Medium 3.5 (its agents' model), Large 4 (1M window), Small 4, Codestral.
+  mistral: ["mistral-medium-latest", "mistral-large-4", "mistral-small-2603", "codestral-2508"],
   novita: ["deepseek/deepseek-v4.1-flash", "deepseek/deepseek-v4-pro", "moonshotai/kimi-k3.1-pro", "moonshotai/kimi-k3", "zai-org/glm-5.3", "minimax/minimax-m3", "qwen/qwen3.8-max"],
 };
-/** Known corrections to the data (Gemini 2.5 Pro cannot switch thinking off: its minimum budget is 128). */
+/** Known corrections to the data (Gemini 2.5 Pro cannot switch thinking off: its minimum budget is 128); an optional third element limits one to those catalogs. */
 const OVERRIDES = [
   [/^(google\/)?gemini-2\.5-pro/, (entry) => { if (entry.reasoning) entry.reasoning.off = false; }],
   // Google's model page: 65,536 output tokens per stream (pi-ai 1.3.0 says 32,768).
   [/^gemini-4-argon$/, (entry) => { entry.output = 65536; }],
+  // Mistral Large 4 on Mistral's API (live 2026-11-19): `reasoning_effort` low / medium / high, never "none" (pi-ai
+  // 1.3.0 says none / high, which it refuses with 400 code 3051).
+  [/^mistral-large-4$/, (entry) => { entry.reasoning = { levels: ["low", "medium", "high"], off: false, map: { low: "low", medium: "medium", high: "high" } }; }, ["mistral"]],
 ];
 /**
  * Models newer than pi-ai 1.2.0's data, added as the vendor documents them (kept when the data has them).
  * Gemini 4 Argon: GA 2026-10-13 (ai.google.dev/gemini-api/docs/generate-content/latest-model), not on the free tier.
  */
 const ADDITIONS = {
+  // Hosted on Mistral's API, not in pi-ai 1.3.0 (its live list, 2026-11-19: tools, image input, a 1M window; the
+  // `reasoning_effort` values each accepts, tried one by one). No price is published to a key: tokens only.
+  mistral: [
+    { id: "deepseek-v4-1-flash-1017", name: "DeepSeek V4.1 Flash", protocol: "chat", image: true, context: 1048576, output: 131072, reasoning: { levels: ["high", "max"], off: true, map: { off: "none", high: "high", max: "max" } }, cost: null, recommended: false },
+    { id: "zai-glm-5-3-flash", name: "GLM 5.3 Flash", protocol: "chat", image: true, context: 1048576, output: 131072, reasoning: { levels: ["low", "high", "max"], off: false, map: { low: "low", high: "high", max: "max" } }, cost: null, recommended: false },
+  ],
   google: [{ id: "gemini-4-argon", name: "Gemini 4 Argon", protocol: "gemini", image: true, context: 1048576, output: 65536, reasoning: { levels: ["low", "medium", "high"], off: false, map: { low: "low", medium: "medium", high: "high" } }, cost: { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 0 }, recommended: false }],
 };
 /** Not chat models, or not for streaming chat. */
@@ -106,6 +118,8 @@ for (const [catalog, file] of Object.entries(SOURCES)) {
     for (const model of Object.values(group)) {
       if (model.type && model.type !== "chat") continue;
       if (SKIP.test(model.id)) continue;
+      // Mistral's audio-understanding models answer chat requests but are no models for an agent.
+      if (catalog === "mistral" && /^voxtral/.test(model.id)) continue;
       const cost = costOf(model.cost);
       const free = Boolean(cost && cost.input === 0 && cost.output === 0 && !/^openrouter\//.test(model.id));
       const flags = flagsOf(model, catalog);
@@ -122,7 +136,7 @@ for (const [catalog, file] of Object.entries(SOURCES)) {
         ...(free ? { free: true } : {}),
         recommended: (RECOMMENDED[catalog] ?? []).includes(model.id),
       });
-      for (const [pattern, fix] of OVERRIDES) if (pattern.test(model.id)) fix(entries.at(-1));
+      for (const [pattern, fix, only] of OVERRIDES) if (pattern.test(model.id) && (!only || only.includes(catalog))) fix(entries.at(-1));
     }
   }
   for (const extra of ADDITIONS[catalog] ?? []) if (!entries.some((entry) => entry.id === extra.id)) entries.push({ ...extra });
@@ -217,13 +231,23 @@ for (const [catalog, file] of Object.entries(SOURCES)) {
 // (no reasoning field is sent; the model thinks as it does by default).
 {
   const hostsDir = args.includes("--hosts") ? args[args.indexOf("--hosts") + 1] : null;
+  // Without a host's list, its entries in the current lib/catalog-data.js stay as they are (they were made from the
+  // list of their day), rather than disappearing.
+  const { CATALOGS: CURRENT } = await import(new URL("../lib/catalog-data.js", import.meta.url));
   const listOf = (name) => {
-    if (!hostsDir) return null;
+    const keep = () => {
+      if (Array.isArray(CURRENT?.[name])) {
+        CATALOGS[name] = CURRENT[name];
+        console.log(`${name}: no list given, ${CURRENT[name].length} models kept from the current catalog`);
+      }
+      return null;
+    };
+    if (!hostsDir) return keep();
     try {
       return JSON.parse(readFileSync(join(hostsDir, `${name}-models.json`), "utf8")).data ?? [];
     } catch {
       console.warn(`${name}: no list in ${hostsDir}`);
-      return null;
+      return keep();
     }
   };
   const finish = (catalog, entries) => {

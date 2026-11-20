@@ -1,6 +1,6 @@
 # dsh-intl-models
 
-DeepSeek Harness 的国际模型插件，支持 OpenAI、Anthropic Claude、xAI Grok、OpenRouter、OpenCode（Zen / Go）、Google Gemini、Cloudflare Workers AI、Vercel AI Gateway，以及开源模型平台 Groq、DeepInfra、Novita、Hugging Face、NVIDIA。
+DeepSeek Harness 的国际模型插件，支持 OpenAI、Anthropic Claude、xAI Grok、OpenRouter、OpenCode（Zen / Go）、Google Gemini、Cloudflare Workers AI、Vercel AI Gateway，开源模型平台 Groq、DeepInfra、Novita、Hugging Face、NVIDIA，以及 Mistral AI。
 
 ## 功能
 
